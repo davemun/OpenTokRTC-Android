@@ -1,16 +1,14 @@
 package com.tokbox.android.opentokrtc;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 
 import android.app.ActionBar;
@@ -57,6 +55,8 @@ import com.tokbox.android.opentokrtc.fragments.SubscriberQualityFragment;
 import com.tokbox.android.opentokrtc.services.ClearNotificationService;
 import com.tokbox.android.opentokrtc.services.ClearNotificationService.ClearBinder;
 import com.tokbox.android.ui.AudioLevelView;
+
+import javax.net.ssl.HttpsURLConnection;
 
 public class ChatRoomActivity extends Activity implements
         SubscriberControlFragment.SubscriberCallbacks,
@@ -332,7 +332,7 @@ public class ChatRoomActivity extends Activity implements
 
         protected HttpClient mHttpClient;
 
-        protected HttpGet mHttpGet;
+        protected HttpsURLConnection mHttpsURLConnection;
 
         protected boolean mDidCompleteSuccessfully;
 
@@ -347,9 +347,14 @@ public class ChatRoomActivity extends Activity implements
             String apiKey = null;
             initializeGetRequest(params[0]);
             try {
-                HttpResponse roomResponse = mHttpClient.execute(mHttpGet);
-                HttpEntity roomEntity = roomResponse.getEntity();
-                String temp = EntityUtils.toString(roomEntity);
+                InputStream in = mHttpsURLConnection.getInputStream();
+                StringBuilder sb = new StringBuilder();
+                BufferedReader rd = new BufferedReader(new InputStreamReader(in));
+                String line;
+                while ((line = rd.readLine()) != null) {
+                    sb.append(line);
+                }
+                String temp = sb.toString();
                 Log.i(LOGTAG, "retrieved room response: " + temp);
                 JSONObject roomJson = new JSONObject(temp);
                 sessionId = roomJson.getString("sid");
@@ -385,25 +390,23 @@ public class ChatRoomActivity extends Activity implements
         }
 
         protected void initializeGetRequest(String room) {
-            URI roomURI;
             URL url;
 
             String urlStr = "https://opentokrtc.com/" + room + ".json";
             try {
                 url = new URL(urlStr);
-                roomURI = new URI(url.getProtocol(), url.getUserInfo(),
-                        url.getHost(), url.getPort(), url.getPath(),
-                        url.getQuery(), url.getRef());
-            } catch (URISyntaxException exception) {
-                Log.e(LOGTAG,
-                        "the room URI is malformed: " + exception.getMessage());
-                return;
             } catch (MalformedURLException exception) {
                 Log.e(LOGTAG,
                         "the room URI is malformed: " + exception.getMessage());
                 return;
             }
-            mHttpGet = new HttpGet(roomURI);
+            try {
+                mHttpsURLConnection = (HttpsURLConnection) url.openConnection();
+            } catch (IOException exception) {
+                Log.e(LOGTAG,
+                        "error while opening HTTPS room link: " + exception.getMessage());
+                return;
+            }
         }
     }
 
